@@ -1,0 +1,221 @@
+---
+project: --- Change Me ----
+kind: PIPELINE
+name: Nested_vSphere_vCSA
+icon: organization,left, is-error
+enabled: true
+description: Nested vSphere with vCSA pipeline
+concurrency: 10
+input:
+  Cluster: CL1
+  Datacenter: DC
+  Datastore: datastore1
+  DNS_Server: 192.168.1.200
+  Domain: corp.local
+  Esx_Network_Gateway: 192.168.1.1
+  Esx_Network_Prefix: '24'
+  Esx_Subnet_Mask: 255.255.255.0
+  Esxi01_IP: 192.168.1.211
+  Esxi01_Name: esxi01
+  Esxi02_IP: 192.168.1.212
+  Esxi02_Name: esxi02
+  Esxi03_IP: 192.168.1.213
+  Esxi03_Name: esxi03
+  Github_Repo: 'https://github.com/americanbwana/vmware-cs-nested.git'
+  NestedEsxi_vmnic0_Network: VM Network
+  NTP_Servers: 0.north-america.pool.ntp.org
+  Syslog_Server: 192.168.1.200
+  VCSA_IP: 192.168.1.210
+  VCSA_Name: 192.168.1.210
+  VM_Folder: Nested
+_inputMeta:
+  Esx_Network_Gateway:
+    mandatory: true
+    description: Gateway for deployment
+  Esx_Network_Prefix:
+    mandatory: true
+    description: 'Network prefix for deployment '
+  Esxi02_Name:
+    mandatory: true
+    description: Machine name prefix for Esxi02
+  Cluster:
+    mandatory: true
+    description: Target vSphere Cluster
+  Esxi03_IP:
+    mandatory: true
+    description: IP Address for Esxi03
+  Esxi01_IP:
+    mandatory: true
+    description: IP Address for Esxi01
+  Esxi02_IP:
+    mandatory: true
+    description: IP Address for Esxi02
+  Esxi03_Name:
+    mandatory: true
+    description: Machine name prefix for Esxi03
+  DNS_Server:
+    mandatory: true
+    description: DNS Server for deployment
+  NTP_Servers:
+    mandatory: true
+    description: NTP server for deployment
+  Syslog_Server:
+    mandatory: true
+    description: Syslog server for deployment
+  NestedEsxi_vmnic0_Network:
+    mandatory: true
+    description: vSphere network for deployment
+  Github_Repo:
+    mandatory: true
+    description: Github repo holding the scripts and files
+  Esxi01_Name:
+    mandatory: true
+    description: Machine name prefix for Esxi01
+  Datastore:
+    mandatory: true
+    description: Target vSphere Datastore
+  Esx_Subnet_Mask:
+    mandatory: true
+    description: Network Subnet Mask for deployment
+  VCSA_Name:
+    mandatory: true
+    description: VCSA name. Use IP if no DNS record, otherwise use the FQDN
+  VCSA_IP:
+    mandatory: true
+    description: IP Address for VCSA
+  Datacenter:
+    mandatory: true
+    description: Target vSphere Datacenter
+  Domain:
+    mandatory: true
+    description: DNS Domain for deployment
+  VM_Folder:
+    mandatory: true
+    description: vSphere VM Folder for vApp
+workspace:
+  type: K8S
+  endpoint: DAG-Home-K8s
+  image: vmware/powerclicore
+  registry: ''
+  path: /working
+  autoCloneForTrigger: false
+  limits:
+    memory: 2048
+    cpu: 1.0
+  customProperties:
+    proxyType: nodePort
+    namespace: codestream-workspace
+    persistentVolumeClaim: cs-pvc-cw
+  environmentVariables:
+    --dns: 192.168.1.200
+stageOrder:
+- Setup
+- Deploy
+- Configure environment
+stages:
+  Configure environment:
+    taskOrder:
+    - Configure vCenter
+    tasks:
+      Configure vCenter:
+        type: CI
+        ignoreFailure: true
+        input:
+          steps:
+          - cd /working/scripts
+          - ''
+          - pwsh configureVc.ps1
+          export: [
+            ]
+          artifacts: [
+            ]
+          process: [
+            ]
+  Deploy:
+    taskOrder:
+    - Deploy ESXi
+    - Deploy VCSA
+    tasks:
+      Deploy ESXi:
+        type: CI
+        input:
+          steps:
+          - cd /working/scripts
+          - ''
+          - pwsh deployNestedEsxi.ps1
+          export: [
+            ]
+          artifacts: [
+            ]
+          process: [
+            ]
+      Deploy VCSA:
+        type: CI
+        input:
+          steps:
+          - cd /working/scripts
+          - ''
+          - pwsh deployVcsa.ps1
+          - ''
+          - ''
+          export: [
+            ]
+          artifacts: [
+            ]
+          process: [
+            ]
+  Setup:
+    taskOrder:
+    - Setup CI
+    tasks:
+      Setup CI:
+        type: CI
+        input:
+          steps:
+          - set -x
+          - '# Save variables for reuse'
+          - export BUILDTIME="$(date "+%y%m%d%H%M")"
+          - '# 2111221028'
+          - cat <<EOF >> /working/variables.ps1
+          - \$BUILDTIME=$BUILDTIME
+          - \$vCenter='${var.Nested-vCenter}'
+          - \$vCenterPass='${var.Nested-vCenter-Password}'
+          - \$vCenterUser='${var.Nested-vCenter-Username}'
+          - \$esxi01Name='${input.Esxi01_Name}'
+          - \$esxi01Ip="${input.Esxi01_IP}"
+          - \$esxi02Name='${input.Esxi02_Name}'
+          - \$esxi02Ip="${input.Esxi02_IP}"
+          - \$esxi03Name='${input.Esxi03_Name}'
+          - \$esxi03Ip="${input.Esxi03_IP}"
+          - \$esxiSubnetMask='${input.Esx_Subnet_Mask}'
+          - \$vcsaName="${input.VCSA_Name}"
+          - \$vcsaIp="${input.VCSA_IP}"
+          - \$esxiMgmtNet="${input.NestedEsxi_vmnic0_Network}"
+          - \$ntpServers='${input.NTP_Servers}'
+          - \$syslogServer='${input.Syslog_Server}'
+          - \$vcsaIp='${input.VCSA_IP}'
+          - \$vcsaHostname='${input.VCSA_Name}'
+          - \$vmFolder='${input.VM_Folder}'
+          - \$esxiGateway='${input.Esx_Network_Gateway}'
+          - \$esxiSubnetPrefix='${input.Esx_Network_Prefix}'
+          - \$domain='${input.Domain}'
+          - \$esxiPassword='${var.Nested-ESXi-Password}'
+          - \$vmDatastore='${input.Datastore}'
+          - \$vmCluster='${input.Cluster}'
+          - \$dnsServers='${input.DNS_Server}'
+          - \$vmDatacenter='${input.Datacenter}'
+          - EOF
+          - ''
+          - '# source /working/deploy.secrets'
+          - ''
+          - '# ls  /nestedEsxi'
+          - ''
+          - git clone ${input.Github_Repo} scripts
+          - ''
+          - ''
+          export: [
+            ]
+          artifacts: [
+            ]
+          process: [
+            ]
